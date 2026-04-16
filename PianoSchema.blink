@@ -1,0 +1,37 @@
+option ClientOutput = "src/shared/PianoSchemaClient.luau"
+option ServerOutput = "src/shared/PianoSchemaServer.luau"
+
+struct NoteEvent {
+    NoteId: u8,
+    Velocity: u8,
+    TimestampOffset: u8,
+    IsPressed: boolean,
+}
+
+struct NoteBatch {
+    FrameNumber: u32,
+    Events: NoteEvent[],
+    SoundfontId: u8,
+    Piano: Instance,
+}
+
+event SendNoteBatch {
+    From: Client,
+    Type: Unreliable,
+    Call: SingleAsync,
+    Data: NoteBatch,
+}
+
+struct RemoteNoteBatch {
+    UserId: f64,
+    Batch: NoteBatch,
+}
+
+event RecvNoteBatch {
+    From: Server,
+    Type: Unreliable,
+    Call: SingleAsync,
+    Data: RemoteNoteBatch,
+}
+
+
