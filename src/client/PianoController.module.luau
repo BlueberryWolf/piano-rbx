@@ -3,12 +3,11 @@ local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
-local Camera = workspace.CurrentCamera
 
 local VoiceProvider = require(ReplicatedStorage.Shared.VoiceProvider)
 local SoundFonts = require(ReplicatedStorage.Shared.SoundFonts)
+local NoteUtils = require(ReplicatedStorage.Shared.NoteUtils)
 local Fusion = require(ReplicatedStorage.Packages.Fusion)
-local UILabs = require(ReplicatedStorage.Packages.UILabs)
 local BlinkClient = require(ReplicatedStorage.Shared.PianoSchemaClient)
 local KeyConfig = require(ReplicatedStorage.Shared.KeyConfig)
 
@@ -23,39 +22,47 @@ local pressedKeys = scope:Value({})
 local sustainActive = scope:Value(false)
 local currentSoundfontName = scope:Value(SoundFonts.Fonts[1].Name)
 local currentLayout = scope:Value("FL")
-local customMapping = scope:Value({})
+local customMapping = scope:Value(KeyConfig.Presets.FL)
 local bindingMidi = scope:Value(nil :: number?)
 local activePiano = scope:Value(nil :: Instance?)
-
-local currentSoundfontIndex = 1
 local isPreloading = scope:Value(false)
 
-local trackedNotes: { [Enum.KeyCode]: number } = {}
+PianoController.state = {
+	pressedKeys = pressedKeys,
+	sustainActive = sustainActive,
+	currentSoundfontName = currentSoundfontName,
+	currentLayout = currentLayout,
+	customMapping = customMapping,
+	bindingMidi = bindingMidi,
+	activePiano = activePiano,
+	isPreloading = isPreloading,
+}
+
+local currentSoundfontIndex = 1
 local sustainToggle = false
 local sustainedNotes = {}
 
+local trackedNotes: { [Enum.KeyCode]: number } = {}
 local remotePlayerStates = {}
 
-local eventPool = {}
 local eventQueue = {}
+local batchStartTime = 0
 local currentFrame = 0
 
-local function acquireEvent()
-	return table.remove(eventPool) or { NoteId = 0, Velocity = 0, TimestampOffset = 0, IsPressed = false }
-end
+local function queueEvent(noteId: number, velocity: number, isPressed: boolean)
+	local now = os.clock()
+	if #eventQueue == 0 then
+		batchStartTime = now
+	end
 
-local function releaseEvent(event)
-	table.insert(eventPool, event)
-end
+	local offset = math.floor((now - batchStartTime) * 1000)
 
-local function queueSustainEvent(isPressed: boolean)
-	local timestampOffset = math.floor((workspace:GetServerTimeNow() % (1 / 60)) * 1000)
-	local event = acquireEvent()
-	event.NoteId = 0
-	event.Velocity = isPressed and 127 or 0
-	event.TimestampOffset = timestampOffset
-	event.IsPressed = isPressed
-	table.insert(eventQueue, event)
+	table.insert(eventQueue, {
+		NoteId = noteId,
+		Velocity = velocity,
+		IsPressed = isPressed,
+		TimestampOffset = math.clamp(offset, 0, 255),
+	})
 end
 
 local function getRemoteState(userId: number)
@@ -68,26 +75,18 @@ local function getRemoteState(userId: number)
 	return remotePlayerStates[userId]
 end
 
-local NOTE_NAMES = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" }
-
-local function getNoteName(midi: number): string
-	local octave = math.floor(midi / 12) - 1
-	return NOTE_NAMES[(midi % 12) + 1] .. tostring(octave)
-end
-
 local function getAssetForNote(midi: number, soundfontIndex: number?): string?
-	local name = getNoteName(midi)
+	local name = NoteUtils.getNoteName(midi)
 	local index = soundfontIndex or currentSoundfontIndex
 	local fontData = SoundFonts.Fonts[index]
 	if not fontData then
 		return nil
 	end
-
 	local font = fontData.Data[name]
 	if not font then
 		return nil
 	end
-	return type(font) == "table" and font[127] or font
+	return if type(font) == "table" then font[127] else font
 end
 
 local function releaseSustainedNotes()
@@ -95,6 +94,16 @@ local function releaseSustainedNotes()
 		VoiceProvider.stop(midi, 0, 0.5)
 	end
 	table.clear(sustainedNotes)
+end
+
+local function triggerPreload(index: number)
+	isPreloading:set(true)
+	local mapping = SoundFonts.getFontMapping(index)
+	VoiceProvider.updatePersistentFonts(0, mapping)
+
+	VoiceProvider.preload(SoundFonts.getFontAssetIds(index), function()
+		isPreloading:set(false)
+	end)
 end
 
 local function captureInput(midi: number, velocity: number, isPressed: boolean)
@@ -134,13 +143,7 @@ local function captureInput(midi: number, velocity: number, isPressed: boolean)
 	end
 	pressedKeys:set(next)
 
-	local timestampOffset = math.floor((workspace:GetServerTimeNow() % (1 / 60)) * 1000)
-	local event = acquireEvent()
-	event.NoteId = midi
-	event.Velocity = velocity
-	event.TimestampOffset = timestampOffset
-	event.IsPressed = isPressed
-	table.insert(eventQueue, event)
+	queueEvent(midi, velocity, isPressed)
 end
 
 local function onInputBegan(input: InputObject, processed: boolean, shiftPressed: boolean)
@@ -171,29 +174,11 @@ local function onInputBegan(input: InputObject, processed: boolean, shiftPressed
 	if input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.RightControl then
 		sustainToggle = not sustainToggle
 		sustainActive:set(sustainToggle)
-		queueSustainEvent(sustainToggle)
+		queueEvent(0, sustainToggle and 127 or 0, sustainToggle)
 		if not sustainToggle then
 			releaseSustainedNotes()
 		end
 		return
-	end
-
-	local isShift = shiftPressed
-	local layout = Fusion.peek(currentLayout)
-
-	local function triggerPreload(index)
-		isPreloading:set(true)
-		local font = SoundFonts.Fonts[index]
-		local fontAssets = {}
-		for _, data in pairs(font.Data) do
-			local id = type(data) == "table" and data[127] or data
-			if id then
-				table.insert(fontAssets, id)
-			end
-		end
-		VoiceProvider.preload(fontAssets, function()
-			isPreloading:set(false)
-		end)
 	end
 
 	if input.KeyCode == Enum.KeyCode.Left then
@@ -214,7 +199,7 @@ local function onInputBegan(input: InputObject, processed: boolean, shiftPressed
 
 	local midi = Fusion.peek(customMapping)[input.KeyCode]
 	if not midi then
-		midi = KeyConfig.getNote(input.KeyCode, isShift, layout)
+		midi = KeyConfig.getNote(input.KeyCode, shiftPressed, Fusion.peek(currentLayout))
 	end
 
 	if midi then
@@ -252,31 +237,13 @@ function PianoController.ClearMapping(midi: number)
 	customMapping:set(next)
 end
 
-function PianoController.InitAssets()
-	local assets = {}
-	for _, fontGroup in ipairs(SoundFonts.Fonts) do
-		for _, data in pairs(fontGroup.Data) do
-			local id = type(data) == "table" and data[127] or data
-			if id then
-				table.insert(assets, id)
-			end
-		end
-	end
-
-	VoiceProvider.init(assets)
+function PianoController.initAudio()
+	local initialMapping = SoundFonts.getFontMapping(1)
+	VoiceProvider.init(initialMapping)
 end
 
 function PianoController.init()
-	local assets = {}
-	for _, fontGroup in ipairs(SoundFonts.Fonts) do
-		for _, data in pairs(fontGroup.Data) do
-			local id = type(data) == "table" and data[127] or data
-			if id then
-				table.insert(assets, id)
-			end
-		end
-	end
-	VoiceProvider.init(assets)
+	PianoController.initAudio()
 
 	local LocalPlayer = Players.LocalPlayer
 
@@ -287,13 +254,13 @@ function PianoController.init()
 			local model = hum.SeatPart:FindFirstAncestorOfClass("Model")
 			if model and CollectionService:HasTag(model, "Piano") then
 				activePiano:set(model)
-				Camera.CameraType = Enum.CameraType.Scriptable
+				workspace.CurrentCamera.CameraType = Enum.CameraType.Scriptable
 				return
 			end
 		end
 
 		if Fusion.peek(activePiano) ~= nil then
-			Camera.CameraType = Enum.CameraType.Custom
+			workspace.CurrentCamera.CameraType = Enum.CameraType.Custom
 		end
 		activePiano:set(nil)
 	end
@@ -331,7 +298,7 @@ function PianoController.init()
 		OnSustainToggled = function()
 			sustainToggle = not sustainToggle
 			sustainActive:set(sustainToggle)
-			queueSustainEvent(sustainToggle)
+			queueEvent(0, sustainToggle and 127 or 0, sustainToggle)
 			if not sustainToggle then
 				releaseSustainedNotes()
 			end
@@ -344,28 +311,28 @@ function PianoController.init()
 			VoiceProvider.stopAll()
 			sustainToggle = false
 			sustainActive:set(false)
-			queueSustainEvent(false)
+			queueEvent(0, 0, false)
 			table.clear(sustainedNotes)
 		end,
 	})
 	app.Parent = playerGui
 
-	if app:IsA("ScreenGui") then
-		scope:Observer(activePiano):onChange(function()
-			app.Enabled = (Fusion.peek(activePiano) ~= nil)
-		end)
-		app.Enabled = (Fusion.peek(activePiano) ~= nil)
-	else
-		scope:Observer(activePiano):onChange(function()
-			app.Visible = (Fusion.peek(activePiano) ~= nil)
-		end)
-		app.Visible = (Fusion.peek(activePiano) ~= nil)
+	local function setAppVisible(visible: boolean)
+		if app:IsA("ScreenGui") then
+			app.Enabled = visible
+		else
+			app.Visible = visible
+		end
 	end
+
+	scope:Observer(activePiano):onChange(function()
+		setAppVisible(Fusion.peek(activePiano) ~= nil)
+	end)
+	setAppVisible(Fusion.peek(activePiano) ~= nil)
 
 	UserInputService.InputBegan:Connect(function(input, processed)
 		local shiftPressed = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)
 			or UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
-
 		onInputBegan(input, processed, shiftPressed)
 	end)
 	UserInputService.InputEnded:Connect(onInputEnded)
@@ -379,10 +346,8 @@ function PianoController.init()
 				SoundfontId = currentSoundfontIndex,
 				Piano = Fusion.peek(activePiano),
 			})
-			for _, event in ipairs(eventQueue) do
-				releaseEvent(event)
-			end
 			table.clear(eventQueue)
+			batchStartTime = 0
 		end
 
 		local camera = workspace.CurrentCamera
@@ -416,27 +381,29 @@ function PianoController.init()
 		local remoteState = getRemoteState(userId)
 
 		for _, event in ipairs(batch.Events) do
-			if event.NoteId == 0 then
-				local wasActive = remoteState.sustainActive
-				remoteState.sustainActive = event.IsPressed
-				if wasActive and not remoteState.sustainActive then
-					for midi in pairs(remoteState.sustainedNotes) do
-						VoiceProvider.stop(midi, userId, 0.5)
+			task.delay(event.TimestampOffset / 1000, function()
+				if event.NoteId == 0 then
+					local wasActive = remoteState.sustainActive
+					remoteState.sustainActive = event.IsPressed
+					if wasActive and not remoteState.sustainActive then
+						for midi in pairs(remoteState.sustainedNotes) do
+							VoiceProvider.stop(midi, userId, 0.5)
+						end
+						table.clear(remoteState.sustainedNotes)
 					end
-					table.clear(remoteState.sustainedNotes)
-				end
-			elseif event.IsPressed then
-				local assetId = getAssetForNote(event.NoteId, batch.SoundfontId)
-				if assetId then
-					VoiceProvider.play(event.NoteId, event.Velocity, assetId, userId, batch.Piano)
-				end
-			else
-				if remoteState.sustainActive then
-					remoteState.sustainedNotes[event.NoteId] = true
+				elseif event.IsPressed then
+					local assetId = getAssetForNote(event.NoteId, batch.SoundfontId)
+					if assetId then
+						VoiceProvider.play(event.NoteId, event.Velocity, assetId, userId, batch.Piano)
+					end
 				else
-					VoiceProvider.stop(event.NoteId, userId, 0.5)
+					if remoteState.sustainActive then
+						remoteState.sustainedNotes[event.NoteId] = true
+					else
+						VoiceProvider.stop(event.NoteId, userId, 0.5)
+					end
 				end
-			end
+			end)
 		end
 	end)
 end

@@ -33,7 +33,7 @@ return function(props: Props)
 	end)
 
 	local combinedPosition = scope:Computed(function(use)
-		local basePos = Fusion.peek(props.Position) or UDim2.new()
+		local basePos = use(props.Position) or UDim2.new()
 		local level = use(pressLevel)
 		return basePos + UDim2.fromOffset(0, level * 5)
 	end)

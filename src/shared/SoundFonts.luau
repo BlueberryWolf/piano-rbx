@@ -398,4 +398,47 @@ SoundFonts.Fonts = {
 	},
 }
 
+function SoundFonts.getAllAssetIds(): { string }
+	local assets = {}
+	for _, fontGroup in ipairs(SoundFonts.Fonts) do
+		for _, data in pairs(fontGroup.Data) do
+			local id = if type(data) == "table" then data[127] else data
+			if id then
+				table.insert(assets, id)
+			end
+		end
+	end
+	return assets
+end
+
+function SoundFonts.getFontAssetIds(index: number): { string }
+	local assets = {}
+	local fontGroup = SoundFonts.Fonts[index]
+	if not fontGroup then
+		return assets
+	end
+	for _, data in pairs(fontGroup.Data) do
+		local id = if type(data) == "table" then data[127] else data
+		if id then
+			table.insert(assets, id)
+		end
+	end
+	return assets
+end
+
+function SoundFonts.getFontMapping(index: number): { [string]: string }
+	local mapping = {}
+	local fontGroup = SoundFonts.Fonts[index]
+	if not fontGroup then
+		return mapping
+	end
+	for noteName, data in pairs(fontGroup.Data) do
+		local id = if type(data) == "table" then data[127] else data
+		if id then
+			mapping[noteName] = id
+		end
+	end
+	return mapping
+end
+
 return SoundFonts

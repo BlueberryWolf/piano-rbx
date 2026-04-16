@@ -2,6 +2,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Fusion = require(ReplicatedStorage.Packages.Fusion)
 local Theme = require(script.Parent.Parent.Theme)
 local KeyConfig = require(ReplicatedStorage.Shared.KeyConfig)
+local NoteUtils = require(ReplicatedStorage.Shared.NoteUtils)
 
 type Props = {
 	Scope: any,
@@ -14,13 +15,6 @@ type Props = {
 	OnStartBinding: (midi: number) -> (),
 	OnClearMapping: (midi: number) -> (),
 }
-
-local NOTE_NAMES = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" }
-
-local function getNoteName(midi: number): string
-	local octave = math.floor(midi / 12) - 1
-	return NOTE_NAMES[(midi % 12) + 1] .. tostring(octave)
-end
 
 return function(props: Props)
 	local scope = props.Scope
@@ -53,6 +47,26 @@ return function(props: Props)
 			end,
 			[Fusion.Children] = {
 				scope:New("UICorner")({ CornerRadius = UDim.new(0, 4) }),
+			},
+		})
+	end
+
+	local function LayoutButton(label: string, layoutId: string)
+		return scope:New("TextButton")({
+			Text = label,
+			Size = UDim2.fromOffset(130, 40),
+			BackgroundColor3 = scope:Computed(function(use)
+				return use(props.CurrentLayout) == layoutId and Theme.Colors.AccentNeon or Theme.Colors.Zinc800
+			end),
+			TextColor3 = scope:Computed(function(use)
+				return use(props.CurrentLayout) == layoutId and Theme.Colors.Zinc950 or Theme.Colors.Zinc100
+			end),
+			FontFace = Theme.Fonts.Body,
+			[Fusion.OnEvent("Activated")] = function()
+				props.OnSetLayout(layoutId)
+			end,
+			[Fusion.Children] = {
+				scope:New("UICorner")({ CornerRadius = UDim.new(0, 6) }),
 			},
 		})
 	end
@@ -211,47 +225,8 @@ return function(props: Props)
 												Padding = UDim.new(0, 10),
 											}),
 
-											scope:New("TextButton")({
-												Text = "FL Studio Style",
-												Size = UDim2.fromOffset(130, 40),
-												BackgroundColor3 = scope:Computed(function(use)
-													return use(props.CurrentLayout) == "FL" and Theme.Colors.AccentNeon
-														or Theme.Colors.Zinc800
-												end),
-												TextColor3 = scope:Computed(function(use)
-													return use(props.CurrentLayout) == "FL" and Theme.Colors.Zinc950
-														or Theme.Colors.Zinc100
-												end),
-												FontFace = Theme.Fonts.Body,
-												[Fusion.OnEvent("Activated")] = function()
-													props.OnSetLayout("FL")
-												end,
-												[Fusion.Children] = {
-													scope:New("UICorner")({ CornerRadius = UDim.new(0, 6) }),
-												},
-											}),
-
-											scope:New("TextButton")({
-												Text = "Virtual Piano",
-												Size = UDim2.fromOffset(130, 40),
-												BackgroundColor3 = scope:Computed(function(use)
-													return use(props.CurrentLayout) == "VirtualPiano"
-															and Theme.Colors.AccentNeon
-														or Theme.Colors.Zinc800
-												end),
-												TextColor3 = scope:Computed(function(use)
-													return use(props.CurrentLayout) == "VirtualPiano"
-															and Theme.Colors.Zinc950
-														or Theme.Colors.Zinc100
-												end),
-												FontFace = Theme.Fonts.Body,
-												[Fusion.OnEvent("Activated")] = function()
-													props.OnSetLayout("VirtualPiano")
-												end,
-												[Fusion.Children] = {
-													scope:New("UICorner")({ CornerRadius = UDim.new(0, 6) }),
-												},
-											}),
+											LayoutButton("FL Studio Style", "FL"),
+											LayoutButton("Virtual Piano", "VirtualPiano"),
 										},
 									}),
 									scope:New("TextLabel")({
@@ -340,7 +315,7 @@ return function(props: Props)
 																Size = UDim2.fromScale(0.3, 1),
 																Position = UDim2.fromOffset(10, 0),
 																BackgroundTransparency = 1,
-																Text = getNoteName(midi),
+																Text = NoteUtils.getNoteName(midi),
 																TextColor3 = Theme.Colors.Zinc100,
 																FontFace = Theme.Fonts.Body,
 																TextXAlignment = Enum.TextXAlignment.Left,
