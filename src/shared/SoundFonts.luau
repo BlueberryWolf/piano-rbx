@@ -441,4 +441,18 @@ function SoundFonts.getFontMapping(index: number): { [string]: string }
 	return mapping
 end
 
+function SoundFonts.getAssetForNote(midi: number, index: number): string?
+	local NoteUtils = require(script.Parent.NoteUtils)
+	local name = NoteUtils.getNoteName(midi)
+	local fontData = SoundFonts.Fonts[index]
+	if not fontData then
+		return nil
+	end
+	local font = fontData.Data[name]
+	if not font then
+		return nil
+	end
+	return if type(font) == "table" then font[127] else font
+end
+
 return SoundFonts
