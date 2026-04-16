@@ -1,5 +1,10 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local StarterPlayer = game:GetService("StarterPlayer")
+
+local PianoController = require(StarterPlayer.StarterPlayerScripts.Client["PianoController.module"])
 local Fusion = require(ReplicatedStorage.Packages.Fusion)
+local UILabs = require(ReplicatedStorage.Packages.UILabs)
+local Maid = require(ReplicatedStorage.Shared.Maid)
 local PianoMain = require(script.Parent.Parent.PianoMain)
 
 local story = {
@@ -18,6 +23,8 @@ local story = {
 		local soundfont = scope:Value("Grand Piano")
 		local isPreloading = scope:Value(false)
 
+		PianoController.InitAssets()
+
 		scope:Observer(props.controls.Layout):onChange(function()
 			currentLayout:set(Fusion.peek(props.controls.Layout))
 		end)
@@ -27,6 +34,7 @@ local story = {
 			local next = table.clone(current)
 			next[midi] = true
 			pressedKeys:set(next)
+			PianoController.captureInput(midi, 127, true)
 		end
 
 		local function onKeyReleased(midi)
@@ -34,6 +42,7 @@ local story = {
 			local next = table.clone(current)
 			next[midi] = nil
 			pressedKeys:set(next)
+			PianoController.captureInput(midi, 0, false)
 		end
 
 		local main = PianoMain({
@@ -62,6 +71,22 @@ local story = {
 				customMapping:set({})
 			end,
 		})
+
+		local userInput = UILabs.Environment.UserInput
+		local conn1 = userInput.InputBegan:Connect(function(input, processed)
+			local shiftPressed = userInput:IsKeyDown(Enum.KeyCode.LeftShift)
+				or userInput:IsKeyDown(Enum.KeyCode.RightShift)
+
+			PianoController.onInputBegan(input, processed, shiftPressed)
+		end)
+		local conn2 = userInput.InputEnded:Connect(function(input, processed)
+			PianoController.onInputEnded(input)
+		end)
+
+		UILabs.Environment.GetJanitor():Add(function()
+			conn1:Disconnect()
+			conn2:Disconnect()
+		end)
 
 		main.Parent = props.target
 	end,

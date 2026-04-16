@@ -1,6 +1,11 @@
 local SoundService = game:GetService("SoundService")
 local TweenService = game:GetService("TweenService")
 local ContentProvider = game:GetService("ContentProvider")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local RunService = game:GetService("RunService")
+
+local UILabs = require(ReplicatedStorage.Packages.UILabs)
 
 local VoiceProvider = {}
 
@@ -14,6 +19,7 @@ type Voice = {
 
 local voicePool: { Voice } = {}
 local activeVoices: { [number]: { [number]: { Voice } } } = {}
+local soundContainer: Instance? = nil
 local MAX_VOICES = 128
 
 local pianoSoundGroups: { [Instance]: SoundGroup } = {}
@@ -21,6 +27,24 @@ VoiceProvider.PianoSoundGroups = pianoSoundGroups
 
 local function velocityToVolume(velocity: number): number
 	return math.pow(velocity / 127, 2)
+end
+
+local function getSoundContainer(): Instance
+	if soundContainer then
+		return soundContainer
+	end
+
+	if RunService:IsRunning() then
+		soundContainer = SoundService
+		return soundContainer :: any
+	else
+		local soundFolder = Instance.new("Folder")
+		soundFolder.Name = "VoiceProvider_Sounds"
+		soundFolder.Parent = UILabs.Environment.PluginWidget
+		UILabs.Environment.GetJanitor():Add(soundFolder)
+		soundContainer = soundFolder
+		return soundFolder
+	end
 end
 
 local function getSoundGroup(pianoInstance: Instance?): SoundGroup?
@@ -36,7 +60,7 @@ local function getSoundGroup(pianoInstance: Instance?): SoundGroup?
 	local sg = Instance.new("SoundGroup")
 	sg.Name = "Piano_" .. pianoInstance.Name
 	sg.Volume = 1
-	sg.Parent = SoundService
+	sg.Parent = getSoundContainer()
 
 	pianoSoundGroups[pianoInstance] = sg
 	return sg
@@ -56,11 +80,11 @@ local masterCache: { [string]: Sound } = {}
 function VoiceProvider.init(preloads: { string }?)
 	local root = Instance.new("Folder")
 	root.Name = "LegacyVoicePool"
-	root.Parent = SoundService
+	root.Parent = getSoundContainer()
 
 	local cache = Instance.new("Folder")
 	cache.Name = "LegacyVoicePool_Cache"
-	cache.Parent = SoundService
+	cache.Parent = getSoundContainer()
 
 	for i = 1, MAX_VOICES do
 		local sound = Instance.new("Sound")
@@ -83,7 +107,7 @@ end
 
 function VoiceProvider.preload(assetIds: { string }, onComplete: (() -> ())?)
 	task.spawn(function()
-		local cacheFolder = SoundService:FindFirstChild("LegacyVoicePool_Cache")
+		local cacheFolder = getSoundContainer():FindFirstChild("LegacyVoicePool_Cache")
 		local newInstances = {}
 
 		for _, id in ipairs(assetIds) do

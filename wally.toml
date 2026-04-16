@@ -5,4 +5,5 @@ registry = "https://github.com/UpliftGames/wally-index"
 realm = "shared"
 
 [dependencies]
+UILabs = "pepeeltoro41/ui-labs@2.3.8"
 Fusion = "elttob/fusion@0.3.0"

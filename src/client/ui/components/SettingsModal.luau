@@ -91,7 +91,13 @@ return function(props: Props)
 
 				[Fusion.Children] = {
 					scope:New("UICorner")({ CornerRadius = UDim.new(0, 12) }),
-					scope:New("UIStroke")({ Color = Theme.Colors.Zinc800, Thickness = 2 }),
+					scope:New("UIStroke")({
+						Color = Theme.Colors.Zinc800,
+						Thickness = 2,
+						Transparency = scope:Computed(function(use)
+							return 1 - use(openSpring)
+						end),
+					}),
 
 					scope:New("Frame")({
 						Size = UDim2.new(0, 160, 1, 0),
@@ -327,7 +333,9 @@ return function(props: Props)
 														Size = UDim2.new(1, -10, 0, 36),
 														BackgroundColor3 = Theme.Colors.Zinc900,
 														[Fusion.Children] = {
-															innerScope:New("UICorner")({ CornerRadius = UDim.new(0, 4) }),
+															innerScope:New("UICorner")({
+																CornerRadius = UDim.new(0, 4),
+															}),
 															innerScope:New("TextLabel")({
 																Size = UDim2.fromScale(0.3, 1),
 																Position = UDim2.fromOffset(10, 0),

@@ -7,6 +7,7 @@ local Players = game:GetService("Players")
 local VoiceProvider = require(ReplicatedStorage.Shared.VoiceProvider)
 local SoundFonts = require(ReplicatedStorage.Shared.SoundFonts)
 local Fusion = require(ReplicatedStorage.Packages.Fusion)
+local UILabs = require(ReplicatedStorage.Packages.UILabs)
 local BlinkClient = require(ReplicatedStorage.Shared.PianoSchemaClient)
 local KeyConfig = require(ReplicatedStorage.Shared.KeyConfig)
 
@@ -15,6 +16,7 @@ local PianoApp = require(script.Parent.ui.PianoApp)
 local PianoController = {}
 
 local scope = Fusion.scoped(Fusion)
+local isRunning = RunService:IsRunning()
 
 local pressedKeys = scope:Value({})
 local sustainActive = scope:Value(false)
@@ -95,9 +97,13 @@ local function releaseSustainedNotes()
 end
 
 local function captureInput(midi: number, velocity: number, isPressed: boolean)
-	local currentPiano = Fusion.peek(activePiano)
-	if not currentPiano and isPressed then
-		return
+	local currentPiano: Instance?
+
+	if isRunning then
+		currentPiano = Fusion.peek(activePiano)
+		if not currentPiano and isPressed then
+			return
+		end
 	end
 
 	if isPressed then
@@ -136,6 +142,94 @@ local function captureInput(midi: number, velocity: number, isPressed: boolean)
 	table.insert(eventQueue, event)
 end
 
+local function onInputBegan(input: InputObject, processed: boolean, shiftPressed: boolean)
+	if processed then
+		return
+	end
+
+	if isRunning then
+		local currentPiano = Fusion.peek(activePiano)
+		if not currentPiano then
+			return
+		end
+	end
+
+	local midiToBind = Fusion.peek(bindingMidi)
+	if midiToBind and input.UserInputType == Enum.UserInputType.Keyboard then
+		local key = input.KeyCode
+		if key ~= Enum.KeyCode.Escape then
+			local current = Fusion.peek(customMapping)
+			local next = table.clone(current)
+			next[key] = midiToBind
+			customMapping:set(next)
+		end
+		bindingMidi:set(nil)
+		return
+	end
+
+	if input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.RightControl then
+		sustainToggle = not sustainToggle
+		sustainActive:set(sustainToggle)
+		queueSustainEvent(sustainToggle)
+		if not sustainToggle then
+			releaseSustainedNotes()
+		end
+		return
+	end
+
+	local isShift = shiftPressed
+	local layout = Fusion.peek(currentLayout)
+
+	local function triggerPreload(index)
+		isPreloading:set(true)
+		local font = SoundFonts.Fonts[index]
+		local fontAssets = {}
+		for _, data in pairs(font.Data) do
+			local id = type(data) == "table" and data[127] or data
+			if id then
+				table.insert(fontAssets, id)
+			end
+		end
+		VoiceProvider.preload(fontAssets, function()
+			isPreloading:set(false)
+		end)
+	end
+
+	if input.KeyCode == Enum.KeyCode.Left then
+		currentSoundfontIndex -= 1
+		if currentSoundfontIndex < 1 then
+			currentSoundfontIndex = #SoundFonts.Fonts
+		end
+		currentSoundfontName:set(SoundFonts.Fonts[currentSoundfontIndex].Name)
+		triggerPreload(currentSoundfontIndex)
+	elseif input.KeyCode == Enum.KeyCode.Right then
+		currentSoundfontIndex += 1
+		if currentSoundfontIndex > #SoundFonts.Fonts then
+			currentSoundfontIndex = 1
+		end
+		currentSoundfontName:set(SoundFonts.Fonts[currentSoundfontIndex].Name)
+		triggerPreload(currentSoundfontIndex)
+	end
+
+	local midi = Fusion.peek(customMapping)[input.KeyCode]
+	if not midi then
+		midi = KeyConfig.getNote(input.KeyCode, isShift, layout)
+	end
+
+	if midi then
+		trackedNotes[input.KeyCode] = midi
+		captureInput(midi, 127, true)
+	end
+end
+
+local function onInputEnded(input: InputObject)
+	local midi = trackedNotes[input.KeyCode]
+	if midi then
+		captureInput(midi, 0, false)
+		trackedNotes[input.KeyCode] = nil
+	end
+end
+
 function PianoController.SetLayout(layout: string)
 	if KeyConfig.Presets[layout] then
 		currentLayout:set(layout)
@@ -155,6 +249,20 @@ function PianoController.ClearMapping(midi: number)
 		end
 	end
 	customMapping:set(next)
+end
+
+function PianoController.InitAssets()
+	local assets = {}
+	for _, fontGroup in ipairs(SoundFonts.Fonts) do
+		for _, data in pairs(fontGroup.Data) do
+			local id = type(data) == "table" and data[127] or data
+			if id then
+				table.insert(assets, id)
+			end
+		end
+	end
+
+	VoiceProvider.init(assets)
 end
 
 function PianoController.init()
@@ -249,91 +357,12 @@ function PianoController.init()
 	end
 
 	UserInputService.InputBegan:Connect(function(input, processed)
-		if processed then
-			return
-		end
-
-		local currentPiano = Fusion.peek(activePiano)
-		if not currentPiano then
-			return
-		end
-
-		local midiToBind = Fusion.peek(bindingMidi)
-		if midiToBind and input.UserInputType == Enum.UserInputType.Keyboard then
-			local key = input.KeyCode
-			if key ~= Enum.KeyCode.Escape then
-				local current = Fusion.peek(customMapping)
-				local next = table.clone(current)
-				next[key] = midiToBind
-				customMapping:set(next)
-			end
-			bindingMidi:set(nil)
-			return
-		end
-
-		if input.KeyCode == Enum.KeyCode.LeftControl or input.KeyCode == Enum.KeyCode.RightControl then
-			sustainToggle = not sustainToggle
-			sustainActive:set(sustainToggle)
-			queueSustainEvent(sustainToggle)
-			if not sustainToggle then
-				releaseSustainedNotes()
-			end
-			return
-		end
-
-		local isShift = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)
+		local shiftPressed = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)
 			or UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
-		local layout = Fusion.peek(currentLayout)
 
-		local function triggerPreload(index)
-			isPreloading:set(true)
-			local font = SoundFonts.Fonts[index]
-			local fontAssets = {}
-			for _, data in pairs(font.Data) do
-				local id = type(data) == "table" and data[127] or data
-				if id then
-					table.insert(fontAssets, id)
-				end
-			end
-			VoiceProvider.preload(fontAssets, function()
-				isPreloading:set(false)
-			end)
-		end
-
-		if input.KeyCode == Enum.KeyCode.Left then
-			currentSoundfontIndex -= 1
-			if currentSoundfontIndex < 1 then
-				currentSoundfontIndex = #SoundFonts.Fonts
-			end
-			currentSoundfontName:set(SoundFonts.Fonts[currentSoundfontIndex].Name)
-			triggerPreload(currentSoundfontIndex)
-		elseif input.KeyCode == Enum.KeyCode.Right then
-			currentSoundfontIndex += 1
-			if currentSoundfontIndex > #SoundFonts.Fonts then
-				currentSoundfontIndex = 1
-			end
-			currentSoundfontName:set(SoundFonts.Fonts[currentSoundfontIndex].Name)
-			triggerPreload(currentSoundfontIndex)
-		end
-
-		local midi = Fusion.peek(customMapping)[input.KeyCode]
-		if not midi then
-			midi = KeyConfig.getNote(input.KeyCode, isShift, layout)
-		end
-
-		if midi then
-			trackedNotes[input.KeyCode] = midi
-			captureInput(midi, 127, true)
-		end
+		onInputBegan(input, processed, shiftPressed)
 	end)
-
-	UserInputService.InputEnded:Connect(function(input)
-		local midi = trackedNotes[input.KeyCode]
-		if midi then
-			captureInput(midi, 0, false)
-			trackedNotes[input.KeyCode] = nil
-		end
-	end)
+	UserInputService.InputEnded:Connect(onInputEnded)
 
 	RunService.Heartbeat:Connect(function()
 		currentFrame += 1
@@ -405,5 +434,9 @@ function PianoController.init()
 		end
 	end)
 end
+
+PianoController.captureInput = captureInput
+PianoController.onInputBegan = onInputBegan
+PianoController.onInputEnded = onInputEnded
 
 return PianoController
