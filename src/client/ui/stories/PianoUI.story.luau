@@ -6,6 +6,7 @@ local Fusion = require(ReplicatedStorage.Packages.Fusion)
 local UILabs = require(ReplicatedStorage.Packages.UILabs)
 local Maid = require(ReplicatedStorage.Shared.Maid)
 local PianoMain = require(script.Parent.Parent.PianoMain)
+local KeyConfig = require(ReplicatedStorage.Shared.KeyConfig)
 
 local story = {
 	fusion = Fusion,
@@ -26,7 +27,9 @@ local story = {
 		PianoController.InitAssets()
 
 		scope:Observer(props.controls.Layout):onChange(function()
-			currentLayout:set(Fusion.peek(props.controls.Layout))
+			local newLayout = Fusion.peek(props.controls.Layout)
+			currentLayout:set(newLayout)
+			PianoController.SetLayout(newLayout)
 		end)
 
 		local function onKeyPressed(midi)
@@ -71,16 +74,36 @@ local story = {
 				customMapping:set({})
 			end,
 		})
+		
+		local manualShift = false
 
 		local userInput = UILabs.Environment.UserInput
-		local conn1 = userInput.InputBegan:Connect(function(input, processed)
-			local shiftPressed = userInput:IsKeyDown(Enum.KeyCode.LeftShift)
-				or userInput:IsKeyDown(Enum.KeyCode.RightShift)
+		local shiftHeld = false
 
-			PianoController.onInputBegan(input, processed, shiftPressed)
+		local conn1 = userInput.InputBegan:Connect(function(input, processed)
+			if input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift then
+				shiftHeld = true
+			end
+
+			if processed then return end
+
+			local midi = KeyConfig.getNote(input.KeyCode, shiftHeld, Fusion.peek(currentLayout))
+
+			if midi then
+				onKeyPressed(midi)
+			end
 		end)
-		local conn2 = userInput.InputEnded:Connect(function(input, processed)
-			PianoController.onInputEnded(input)
+
+		local conn2 = userInput.InputEnded:Connect(function(input)
+			if input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift then
+				shiftHeld = false
+			end
+
+			local midi = KeyConfig.getNote(input.KeyCode, true, Fusion.peek(currentLayout))
+			local midi2 = KeyConfig.getNote(input.KeyCode, false, Fusion.peek(currentLayout))
+
+			if midi then onKeyReleased(midi) end
+			if midi2 and midi2 ~= midi then onKeyReleased(midi2) end
 		end)
 
 		UILabs.Environment.GetJanitor():Add(function()
