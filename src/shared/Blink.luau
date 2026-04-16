@@ -2,7 +2,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local rootBlink = ReplicatedStorage:FindFirstChild("Blink")
 
 if rootBlink then
-	return require(rootBlink)
+	return require(rootBlink :: any)
 end
 
 local Stub = {}

@@ -47,7 +47,7 @@ local function ensureSoundLoaded(sound: Sound)
 		return
 	end
 	pcall(function()
-		sound:LoadAsync()
+		(sound :: any):LoadAsync()
 	end)
 end
 
@@ -119,14 +119,14 @@ function VoiceProvider.play(
 )
 	sourceId = sourceId or 0
 
-	if not activeVoices[sourceId] then
-		activeVoices[sourceId] = {}
+	if not activeVoices[sourceId :: number] then
+		activeVoices[sourceId :: number] = {}
 	end
-	if not activeVoices[sourceId][noteId] then
-		activeVoices[sourceId][noteId] = {}
+	if not activeVoices[sourceId :: number][noteId] then
+		activeVoices[sourceId :: number][noteId] = {}
 	end
 
-	local voice: Voice? = nil
+	local voice: Voice = nil
 	for _, v in ipairs(voicePool) do
 		if not v.Active and not v.Fading then
 			voice = v
@@ -135,9 +135,9 @@ function VoiceProvider.play(
 	end
 
 	if not voice then
-		voice = table.remove(voicePool, 1)
-		VoiceProvider.stopVoice(voice, 0.1)
-		table.insert(voicePool, voice)
+		voice = table.remove(voicePool, 1) :: Voice
+		VoiceProvider.stopVoice(voice :: any, 0.1)
+		table.insert(voicePool, voice :: any)
 	end
 
 	if voice.Tween then
@@ -160,12 +160,12 @@ function VoiceProvider.play(
 	voice.Instance.TimePosition = 0
 	voice.Instance:Play()
 
-	table.insert(activeVoices[sourceId][noteId], voice)
+	table.insert(activeVoices[sourceId :: number][noteId], voice)
 end
 
 function VoiceProvider.stop(noteId: number, sourceId: number?, fadeTime: number?)
 	sourceId = sourceId or 0
-	local voices = activeVoices[sourceId] and activeVoices[sourceId][noteId]
+	local voices = activeVoices[sourceId :: number] and activeVoices[sourceId :: number][noteId]
 	if not voices then
 		return
 	end
@@ -174,7 +174,7 @@ function VoiceProvider.stop(noteId: number, sourceId: number?, fadeTime: number?
 		VoiceProvider.stopVoice(voice, fadeTime or 3.0)
 	end
 
-	table.clear(activeVoices[sourceId][noteId])
+	table.clear(activeVoices[sourceId :: number][noteId])
 end
 
 function VoiceProvider.stopVoice(voice: Voice, fadeTime: number)

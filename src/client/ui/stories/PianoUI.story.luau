@@ -16,6 +16,7 @@ local story = {
 		local customMapping = scope:Value({})
 		local bindingMidi = scope:Value(nil :: number?)
 		local soundfont = scope:Value("Grand Piano")
+		local isPreloading = scope:Value(false)
 
 		scope:Observer(props.controls.Layout):onChange(function()
 			currentLayout:set(Fusion.peek(props.controls.Layout))
@@ -43,6 +44,7 @@ local story = {
 			CurrentLayout = currentLayout,
 			CustomMapping = customMapping,
 			BindingMidi = bindingMidi,
+			IsPreloading = isPreloading,
 
 			OnKeyPressed = onKeyPressed,
 			OnKeyReleased = onKeyReleased,

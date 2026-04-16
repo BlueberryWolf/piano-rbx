@@ -1,0 +1,13 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Compile Blink",
+      "type": "shell",
+      "command": "blink PianoSchema.blink",
+      "windows": {
+        "command": "blink.exe PianoSchema.blink"
+      }
+    }
+  ]
+}

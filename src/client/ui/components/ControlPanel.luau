@@ -9,7 +9,7 @@ type Props = {
 	IsPreloading: Fusion.UsedAs<boolean>,
 	OnSustainToggled: () -> (),
 	OnSettingsOpened: () -> (),
-	OnPanic: () -> (),
+	OnPanic: (() -> ())?,
 }
 
 return function(props: Props)

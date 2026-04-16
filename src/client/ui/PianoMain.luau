@@ -27,7 +27,7 @@ type Props = {
 	OnStartBinding: (midi: number) -> (),
 	OnClearMapping: (midi: number) -> (),
 	IsPreloading: Fusion.UsedAs<boolean>,
-	OnPanic: () -> (),
+	OnPanic: (() -> ())?,
 }
 
 return function(props: Props)

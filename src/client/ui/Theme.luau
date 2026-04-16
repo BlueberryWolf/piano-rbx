@@ -5,6 +5,7 @@ local Theme = {
 		Zinc800 = Color3.fromHex("#27272a"),
 		Zinc700 = Color3.fromHex("#3f3f46"),
 		Zinc600 = Color3.fromHex("#52525b"),
+		Zinc500 = Color3.fromHex("#71717a"),
 		Zinc400 = Color3.fromHex("#a1a1aa"),
 		Zinc100 = Color3.fromHex("#f4f4f5"),
 
