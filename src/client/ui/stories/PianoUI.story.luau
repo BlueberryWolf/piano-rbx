@@ -75,20 +75,17 @@ local story = {
 			end,
 		})
 		
-		local manualShift = false
-
 		local userInput = UILabs.Environment.UserInput
 		local shiftHeld = false
 
 		local conn1 = userInput.InputBegan:Connect(function(input, processed)
 			if input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift then
 				shiftHeld = true
+				return
 			end
 
-			if processed then return end
-
 			local midi = KeyConfig.getNote(input.KeyCode, shiftHeld, Fusion.peek(currentLayout))
-
+			
 			if midi then
 				onKeyPressed(midi)
 			end
@@ -98,10 +95,9 @@ local story = {
 			if input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift then
 				shiftHeld = false
 			end
-
 			local midi = KeyConfig.getNote(input.KeyCode, true, Fusion.peek(currentLayout))
 			local midi2 = KeyConfig.getNote(input.KeyCode, false, Fusion.peek(currentLayout))
-
+			
 			if midi then onKeyReleased(midi) end
 			if midi2 and midi2 ~= midi then onKeyReleased(midi2) end
 		end)

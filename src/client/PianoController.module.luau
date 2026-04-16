@@ -3,6 +3,7 @@ local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
+local Camera = workspace.CurrentCamera
 
 local VoiceProvider = require(ReplicatedStorage.Shared.VoiceProvider)
 local SoundFonts = require(ReplicatedStorage.Shared.SoundFonts)
@@ -286,8 +287,13 @@ function PianoController.init()
 			local model = hum.SeatPart:FindFirstAncestorOfClass("Model")
 			if model and CollectionService:HasTag(model, "Piano") then
 				activePiano:set(model)
+				Camera.CameraType = Enum.CameraType.Scriptable
 				return
 			end
+		end
+
+		if Fusion.peek(activePiano) ~= nil then
+			Camera.CameraType = Enum.CameraType.Custom
 		end
 		activePiano:set(nil)
 	end
