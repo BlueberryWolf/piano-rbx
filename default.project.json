@@ -22,9 +22,14 @@
     },
 
     "StarterPlayer": {
+      "$className": "StarterPlayer",
       "StarterPlayerScripts": {
-        "Client": {
-          "$path": "src/client"
+        "$className": "StarterPlayerScripts",
+        "PianoActor": {
+          "$className": "Actor",
+          "Client": {
+            "$path": "src/client"
+          }
         }
       }
     },

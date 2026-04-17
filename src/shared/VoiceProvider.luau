@@ -1,3 +1,5 @@
+--!native
+--!optimize 2
 local SoundService = game:GetService("SoundService")
 local TweenService = game:GetService("TweenService")
 local ContentProvider = game:GetService("ContentProvider")

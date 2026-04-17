@@ -166,6 +166,7 @@ Queue.Unreliable[1] = table.create(256)
 export type NoteEvent = { NoteId: number, Velocity: number, TimestampOffset: number, IsPressed: boolean }
 export type NoteBatch = {
 	FrameNumber: number,
+	SentAt: number,
 	Events: { { NoteId: number, Velocity: number, TimestampOffset: number, IsPressed: boolean } },
 	SoundfontId: number,
 	Piano: Instance,
@@ -174,6 +175,7 @@ export type RemoteNoteBatch = {
 	UserId: number,
 	Batch: {
 		FrameNumber: number,
+		SentAt: number,
 		Events: { { NoteId: number, Velocity: number, TimestampOffset: number, IsPressed: boolean } },
 		SoundfontId: number,
 		Piano: Instance,
@@ -181,16 +183,18 @@ export type RemoteNoteBatch = {
 }
 function SerdesFunctions.WriteEVENT_SendNoteBatch(Value: {
 	FrameNumber: number,
+	SentAt: number,
 	Events: { { NoteId: number, Velocity: number, TimestampOffset: number, IsPressed: boolean } },
 	SoundfontId: number,
 	Piano: Instance,
 }): ()
-	-- Allocate BLOCK: 8 bytes
-	local BLOCK_START = Allocate(8)
+	-- Allocate BLOCK: 16 bytes
+	local BLOCK_START = Allocate(16)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 0)
 	buffer.writeu32(SendBuffer, BLOCK_START + 1, Value.FrameNumber)
+	buffer.writef64(SendBuffer, BLOCK_START + 5, Value.SentAt)
 	-- START ARRAY
-	buffer.writeu16(SendBuffer, BLOCK_START + 5, #Value.Events)
+	buffer.writeu16(SendBuffer, BLOCK_START + 13, #Value.Events)
 	-- Allocate BLOCK: 4 bytes
 	local ARRAY_START_1 = Allocate(4 * #Value.Events)
 	for Index = 1, #Value.Events do
@@ -213,7 +217,7 @@ function SerdesFunctions.WriteEVENT_SendNoteBatch(Value: {
 		buffer.writeu8(SendBuffer, OPERATION_OFFSET_3, Item_1.IsPressed and 1 or 0)
 	end
 	-- END ARRAY
-	buffer.writeu8(SendBuffer, BLOCK_START + 7, Value.SoundfontId)
+	buffer.writeu8(SendBuffer, BLOCK_START + 15, Value.SoundfontId)
 	table.insert(SendInstances, Value.Piano or Null)
 end
 
@@ -221,19 +225,21 @@ function SerdesFunctions.ReadEVENT_RecvNoteBatch(): {
 	UserId: number,
 	Batch: {
 		FrameNumber: number,
+		SentAt: number,
 		Events: { { NoteId: number, Velocity: number, TimestampOffset: number, IsPressed: boolean } },
 		SoundfontId: number,
 		Piano: Instance,
 	},
 }
-	-- Read BLOCK: 15 bytes
-	local BLOCK_START = Read(15)
+	-- Read BLOCK: 23 bytes
+	local BLOCK_START = Read(23)
 	local Value = {} :: any
 	Value.UserId = buffer.readf64(RecieveBuffer, BLOCK_START + 0)
 	Value.Batch = {} :: any
 	Value.Batch.FrameNumber = buffer.readu32(RecieveBuffer, BLOCK_START + 8)
+	Value.Batch.SentAt = buffer.readf64(RecieveBuffer, BLOCK_START + 12)
 	-- START ARRAY
-	local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 12)
+	local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 20)
 	if Length < 0 then
 		error(`Expected "Length" to be larger than 0, got {Length} instead.`)
 	end
@@ -264,7 +270,7 @@ function SerdesFunctions.ReadEVENT_RecvNoteBatch(): {
 		table.insert(Value.Batch.Events, Item_1)
 	end
 	-- END ARRAY
-	Value.Batch.SoundfontId = buffer.readu8(RecieveBuffer, BLOCK_START + 14)
+	Value.Batch.SoundfontId = buffer.readu8(RecieveBuffer, BLOCK_START + 22)
 	RecieveInstanceCursor += 1
 	Value.Batch.Piano = RecieveInstances[RecieveInstanceCursor]
 	if typeof(Value.Batch.Piano) ~= "Instance" then
@@ -351,6 +357,7 @@ Unreliable.OnClientEvent:Connect(function(Buffer: buffer, Instances: { Instance 
 				UserId: number,
 				Batch: {
 					FrameNumber: number,
+					SentAt: number,
 					Events: { { NoteId: number, Velocity: number, TimestampOffset: number, IsPressed: boolean } },
 					SoundfontId: number,
 					Piano: Instance,
@@ -370,6 +377,7 @@ local Returns = table.freeze({
 	SendNoteBatch = {
 		Fire = function(Value: {
 			FrameNumber: number,
+			SentAt: number,
 			Events: { { NoteId: number, Velocity: number, TimestampOffset: number, IsPressed: boolean } },
 			SoundfontId: number,
 			Piano: Instance,
@@ -389,6 +397,7 @@ local Returns = table.freeze({
 				UserId: number,
 				Batch: {
 					FrameNumber: number,
+					SentAt: number,
 					Events: { { NoteId: number, Velocity: number, TimestampOffset: number, IsPressed: boolean } },
 					SoundfontId: number,
 					Piano: Instance,

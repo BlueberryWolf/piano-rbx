@@ -3,9 +3,14 @@
 registry = "test"
 
 [[package]]
+name = "1foreverhd/topbarplus"
+version = "3.4.0"
+dependencies = []
+
+[[package]]
 name = "blue/piano-rbx"
 version = "0.1.0"
-dependencies = [["Fusion", "elttob/fusion@0.3.0"], ["UILabs", "pepeeltoro41/ui-labs@2.4.2"]]
+dependencies = [["Fusion", "elttob/fusion@0.3.0"], ["Icon", "1foreverhd/topbarplus@3.4.0"], ["UILabs", "pepeeltoro41/ui-labs@2.4.2"]]
 
 [[package]]
 name = "elttob/fusion"

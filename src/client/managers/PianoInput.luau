@@ -1,13 +1,16 @@
+--!native
+--!optimize 2
 local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
-local PianoState = require(script.Parent.Parent.PianoState)
+local PianoState = require(ReplicatedStorage.Shared.PianoState)
 local PianoNetworking = require(script.Parent.PianoNetworking)
 local VoiceProvider = require(ReplicatedStorage.Shared.VoiceProvider)
 local SoundFonts = require(ReplicatedStorage.Shared.SoundFonts)
 local KeyConfig = require(ReplicatedStorage.Shared.KeyConfig)
 local Fusion = require(ReplicatedStorage.Packages.Fusion)
+local MidiManager = require(script.Parent.MidiManager)
 
 local PianoInput = {}
 
@@ -30,7 +33,10 @@ function PianoInput.releaseSustainedNotes()
 	table.clear(PianoState.sustainedNotes)
 end
 
-function PianoInput.captureInput(midi: number, velocity: number, isPressed: boolean)
+local activeSourceId: { [number]: number } = {}
+
+function PianoInput.captureInput(midi: number, velocity: number, isPressed: boolean, sourceId: number?)
+	local sid = sourceId or 0
 	local currentPiano: Instance?
 
 	if isRunning then
@@ -43,14 +49,17 @@ function PianoInput.captureInput(midi: number, velocity: number, isPressed: bool
 	if isPressed then
 		local assetId = SoundFonts.getAssetForNote(midi, Fusion.peek(PianoState.currentSoundfontIndex))
 		if assetId then
-			VoiceProvider.play(midi, velocity, assetId, 0, currentPiano)
+			VoiceProvider.play(midi, velocity, assetId, sid, currentPiano)
+			activeSourceId[midi] = sid
 		end
 		PianoState.sustainedNotes[midi] = nil
 	else
+		local stopSid = activeSourceId[midi] or sid
+		activeSourceId[midi] = nil
 		if PianoState.sustainToggle then
 			PianoState.sustainedNotes[midi] = true
 		else
-			VoiceProvider.stop(midi, 0, 0.4)
+			VoiceProvider.stop(midi, stopSid, 0.4)
 		end
 	end
 
@@ -143,13 +152,36 @@ local function onInputEnded(input: InputObject)
 end
 
 function PianoInput.init()
+	local shiftHeld = false
+
 	UserInputService.InputBegan:Connect(function(input, processed)
-		local shiftPressed = UserInputService:IsKeyDown(Enum.KeyCode.LeftShift)
-			or UserInputService:IsKeyDown(Enum.KeyCode.RightShift)
-		onInputBegan(input, processed, shiftPressed)
+		if input.UserInputType == Enum.UserInputType.Keyboard then
+			if input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift then
+				shiftHeld = true
+			end
+		end
+		onInputBegan(input, processed, shiftHeld)
 	end)
 
-	UserInputService.InputEnded:Connect(onInputEnded)
+	UserInputService.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.Keyboard then
+			if input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift then
+				shiftHeld = false
+			end
+		end
+		onInputEnded(input)
+	end)
+
+	MidiManager.init({
+		get = function()
+			return Fusion.peek(PianoState.midiOctaveOffset)
+		end,
+	}, function(event)
+		if not Fusion.peek(PianoState.midiEnabled) then
+			return
+		end
+		PianoInput.captureInput(event.noteId, event.velocity, event.isPressed, event.channel)
+	end)
 end
 
 return PianoInput

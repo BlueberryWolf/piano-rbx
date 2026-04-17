@@ -10,6 +10,7 @@ struct NoteEvent {
 
 struct NoteBatch {
     FrameNumber: u32,
+    SentAt: f64,
     Events: NoteEvent[],
     SoundfontId: u8,
     Piano: Instance,

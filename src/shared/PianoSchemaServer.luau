@@ -167,6 +167,7 @@ Queue.Unreliable[0] = table.create(256)
 export type NoteEvent = { NoteId: number, Velocity: number, TimestampOffset: number, IsPressed: boolean }
 export type NoteBatch = {
 	FrameNumber: number,
+	SentAt: number,
 	Events: { { NoteId: number, Velocity: number, TimestampOffset: number, IsPressed: boolean } },
 	SoundfontId: number,
 	Piano: Instance,
@@ -175,6 +176,7 @@ export type RemoteNoteBatch = {
 	UserId: number,
 	Batch: {
 		FrameNumber: number,
+		SentAt: number,
 		Events: { { NoteId: number, Velocity: number, TimestampOffset: number, IsPressed: boolean } },
 		SoundfontId: number,
 		Piano: Instance,
@@ -182,16 +184,18 @@ export type RemoteNoteBatch = {
 }
 function SerdesFunctions.ReadEVENT_SendNoteBatch(): {
 	FrameNumber: number,
+	SentAt: number,
 	Events: { { NoteId: number, Velocity: number, TimestampOffset: number, IsPressed: boolean } },
 	SoundfontId: number,
 	Piano: Instance,
 }
-	-- Read BLOCK: 7 bytes
-	local BLOCK_START = Read(7)
+	-- Read BLOCK: 15 bytes
+	local BLOCK_START = Read(15)
 	local Value = {} :: any
 	Value.FrameNumber = buffer.readu32(RecieveBuffer, BLOCK_START + 0)
+	Value.SentAt = buffer.readf64(RecieveBuffer, BLOCK_START + 4)
 	-- START ARRAY
-	local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 4)
+	local Length = buffer.readu16(RecieveBuffer, BLOCK_START + 12)
 	if Length < 0 then
 		error(`Expected "Length" to be larger than 0, got {Length} instead.`)
 	end
@@ -222,7 +226,7 @@ function SerdesFunctions.ReadEVENT_SendNoteBatch(): {
 		table.insert(Value.Events, Item_1)
 	end
 	-- END ARRAY
-	Value.SoundfontId = buffer.readu8(RecieveBuffer, BLOCK_START + 6)
+	Value.SoundfontId = buffer.readu8(RecieveBuffer, BLOCK_START + 14)
 	RecieveInstanceCursor += 1
 	Value.Piano = RecieveInstances[RecieveInstanceCursor]
 	if typeof(Value.Piano) ~= "Instance" then
@@ -235,18 +239,20 @@ function SerdesFunctions.WriteEVENT_RecvNoteBatch(Value: {
 	UserId: number,
 	Batch: {
 		FrameNumber: number,
+		SentAt: number,
 		Events: { { NoteId: number, Velocity: number, TimestampOffset: number, IsPressed: boolean } },
 		SoundfontId: number,
 		Piano: Instance,
 	},
 }): ()
-	-- Allocate BLOCK: 16 bytes
-	local BLOCK_START = Allocate(16)
+	-- Allocate BLOCK: 24 bytes
+	local BLOCK_START = Allocate(24)
 	buffer.writeu8(SendBuffer, BLOCK_START + 0, 1)
 	buffer.writef64(SendBuffer, BLOCK_START + 1, Value.UserId)
 	buffer.writeu32(SendBuffer, BLOCK_START + 9, Value.Batch.FrameNumber)
+	buffer.writef64(SendBuffer, BLOCK_START + 13, Value.Batch.SentAt)
 	-- START ARRAY
-	buffer.writeu16(SendBuffer, BLOCK_START + 13, #Value.Batch.Events)
+	buffer.writeu16(SendBuffer, BLOCK_START + 21, #Value.Batch.Events)
 	-- Allocate BLOCK: 4 bytes
 	local ARRAY_START_1 = Allocate(4 * #Value.Batch.Events)
 	for Index = 1, #Value.Batch.Events do
@@ -269,7 +275,7 @@ function SerdesFunctions.WriteEVENT_RecvNoteBatch(Value: {
 		buffer.writeu8(SendBuffer, OPERATION_OFFSET_3, Item_1.IsPressed and 1 or 0)
 	end
 	-- END ARRAY
-	buffer.writeu8(SendBuffer, BLOCK_START + 15, Value.Batch.SoundfontId)
+	buffer.writeu8(SendBuffer, BLOCK_START + 23, Value.Batch.SoundfontId)
 	table.insert(SendInstances, Value.Batch.Piano or Null)
 end
 
@@ -372,6 +378,7 @@ Unreliable.OnServerEvent:Connect(function(Player: Player, Buffer: buffer, Instan
 		if Index == 0 then
 			local Value: {
 				FrameNumber: number,
+				SentAt: number,
 				Events: { { NoteId: number, Velocity: number, TimestampOffset: number, IsPressed: boolean } },
 				SoundfontId: number,
 				Piano: Instance,
@@ -392,6 +399,7 @@ local Returns = table.freeze({
 			Player: Player,
 			Value: {
 				FrameNumber: number,
+				SentAt: number,
 				Events: { { NoteId: number, Velocity: number, TimestampOffset: number, IsPressed: boolean } },
 				SoundfontId: number,
 				Piano: Instance,
@@ -412,6 +420,7 @@ local Returns = table.freeze({
 				UserId: number,
 				Batch: {
 					FrameNumber: number,
+					SentAt: number,
 					Events: { { NoteId: number, Velocity: number, TimestampOffset: number, IsPressed: boolean } },
 					SoundfontId: number,
 					Piano: Instance,
@@ -428,6 +437,7 @@ local Returns = table.freeze({
 			UserId: number,
 			Batch: {
 				FrameNumber: number,
+				SentAt: number,
 				Events: { { NoteId: number, Velocity: number, TimestampOffset: number, IsPressed: boolean } },
 				SoundfontId: number,
 				Piano: Instance,
@@ -445,6 +455,7 @@ local Returns = table.freeze({
 				UserId: number,
 				Batch: {
 					FrameNumber: number,
+					SentAt: number,
 					Events: { { NoteId: number, Velocity: number, TimestampOffset: number, IsPressed: boolean } },
 					SoundfontId: number,
 					Piano: Instance,
@@ -465,6 +476,7 @@ local Returns = table.freeze({
 				UserId: number,
 				Batch: {
 					FrameNumber: number,
+					SentAt: number,
 					Events: { { NoteId: number, Velocity: number, TimestampOffset: number, IsPressed: boolean } },
 					SoundfontId: number,
 					Piano: Instance,

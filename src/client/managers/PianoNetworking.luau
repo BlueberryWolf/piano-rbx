@@ -1,8 +1,10 @@
+--!native
+--!optimize 2
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 
-local PianoState = require(script.Parent.Parent.PianoState)
+local PianoState = require(ReplicatedStorage.Shared.PianoState)
 local VoiceProvider = require(ReplicatedStorage.Shared.VoiceProvider)
 local SoundFonts = require(ReplicatedStorage.Shared.SoundFonts)
 local BlinkClient = require(ReplicatedStorage.Shared.PianoSchemaClient)
@@ -13,13 +15,22 @@ local PianoNetworking = {}
 local eventQueue = {}
 local batchStartTime = 0
 local currentFrame = 0
-local remotePlayerStates = {}
 
-local function getRemoteState(userId: number)
+type RemoteState = {
+	sustainActive: boolean,
+	sustainedNotes: { [number]: boolean },
+	baseRemoteTime: number?,
+	baseLocalTime: number?,
+}
+local remotePlayerStates: { [number]: RemoteState } = {}
+
+local function getRemoteState(userId: number): RemoteState
 	if not remotePlayerStates[userId] then
 		remotePlayerStates[userId] = {
 			sustainActive = false,
 			sustainedNotes = {},
+			baseRemoteTime = nil,
+			baseLocalTime = nil,
 		}
 	end
 	return remotePlayerStates[userId]
@@ -52,6 +63,7 @@ function PianoNetworking.init()
 		if #eventQueue > 0 then
 			BlinkClient.SendNoteBatch.Fire({
 				FrameNumber = currentFrame,
+				SentAt = os.clock(),
 				Events = eventQueue,
 				SoundfontId = Fusion.peek(PianoState.currentSoundfontIndex),
 				Piano = Fusion.peek(PianoState.activePiano),
@@ -69,8 +81,24 @@ function PianoNetworking.init()
 		local batch = data.Batch
 		local remoteState = getRemoteState(userId)
 
+		local now = os.clock()
+		local bufferLatency = Fusion.peek(PianoState.networkBufferLatency)
+
+		if
+			not remoteState.baseRemoteTime
+			or math.abs((batch.SentAt - remoteState.baseRemoteTime) - (now - remoteState.baseLocalTime)) > 1.0
+		then
+			remoteState.baseRemoteTime = batch.SentAt
+			remoteState.baseLocalTime = now + bufferLatency
+		end
+
+		local batchPlaybackTime = remoteState.baseLocalTime + (batch.SentAt - remoteState.baseRemoteTime)
+
 		for _, event in ipairs(batch.Events) do
-			task.delay(event.TimestampOffset / 1000, function()
+			local eventPlaybackTime = batchPlaybackTime + (event.TimestampOffset / 1000)
+			local delay = math.max(0, eventPlaybackTime - now)
+
+			task.delay(delay, function()
 				if event.NoteId == 0 then
 					local wasActive = remoteState.sustainActive
 					remoteState.sustainActive = event.IsPressed

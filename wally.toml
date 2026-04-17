@@ -7,3 +7,4 @@ realm = "shared"
 [dependencies]
 UILabs = "pepeeltoro41/ui-labs@2.3.8"
 Fusion = "elttob/fusion@0.3.0"
+Icon = "1foreverhd/topbarplus@3.4.0"

@@ -6,7 +6,7 @@ local SoundFonts = require(ReplicatedStorage.Shared.SoundFonts)
 local KeyConfig = require(ReplicatedStorage.Shared.KeyConfig)
 local Fusion = require(ReplicatedStorage.Packages.Fusion)
 
-local PianoState = require(script.Parent.PianoState)
+local PianoState = require(ReplicatedStorage.Shared.PianoState)
 local PianoInput = require(script.Parent.managers.PianoInput)
 local PianoNetworking = require(script.Parent.managers.PianoNetworking)
 local PianoSpatializer = require(script.Parent.managers.PianoSpatializer)
@@ -55,8 +55,6 @@ end
 
 function PianoController.init()
 	PianoController.initAudio()
-
-	-- Initialize managers
 	PianoNetworking.init()
 	PianoSpatializer.init()
 	PianoSeating.init()
@@ -115,7 +113,6 @@ function PianoController.init()
 	setAppVisible(Fusion.peek(PianoState.activePiano) ~= nil)
 end
 
--- Export captureInput for use in UI or other places if needed
 PianoController.captureInput = PianoInput.captureInput
 
 return PianoController
